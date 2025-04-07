@@ -6,6 +6,7 @@
 
 int main() 
 {
+	// 123
 	ViSession defaultRM, vi;
 	char buf[256] = { 0 };
 	long ErrorStatus;
