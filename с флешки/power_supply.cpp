@@ -112,7 +112,7 @@ int main()
 				printf("Found offset voltage = %f\n", found_U_offset);
 				break;
 			}
-			else if ((stepChanged)&& (measured_current > I_offset + 0.01)) {
+			else if ((stepChanged)&& (measured_current > (I_offset + 0.01))) {
 				found_U_offset = limitU_offset;
 				printf("The value of voltage is out of range 350-370 mA. The nearest greater value was found\n");
 				printf("I = %f A\n", measured_current);
@@ -124,7 +124,7 @@ int main()
 
 			limitU_offset -= step_local; //0.1;
 
-			if ((!stepChanged) && (limitU_offset > (I_offset + 0.01))) {
+			if ((!stepChanged) && (measured_current > (I_offset + 0.01))) {
 				limitU_offset += step_local;
 				step_local = 0.01;
 				stepChanged = true;
