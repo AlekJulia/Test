@@ -15,6 +15,28 @@
 //	}
 //}
 
+//надо как-то error статус добавить и выводить потом ошибки
+float measure_voltage(ViSession vi, char* buf) {
+    viPrintf(vi, (ViPRsrc)"MEAS:VOLT?\n");
+    viScanf(vi, (ViPRsrc)"%t", buf);
+    return atof(buf);
+}
+
+float measure_current(ViSession vi, char* buf) {
+    viPrintf(vi, (ViPRsrc)"MEAS:CURR?\n");
+    viScanf(vi, (ViPRsrc)"%t", buf);
+    return atof(buf);
+}
+
+float add_voltage_if_needed(ViSession vi, float voltage_limit, float measured_voltage, char* command_buf, size_t buf_size) {
+    if (measured_voltage < voltage_limit) {
+        voltage_limit += voltage_limit - measured_voltage;
+        snprintf(command_buf, buf_size, "VOLT %.2f\n", voltage_limit);
+        viPrintf(vi, (ViPRsrc)command_buf);
+    }
+    return voltage_limit;
+}
+
 
 int main()
 {
@@ -62,16 +84,11 @@ int main()
 		ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out1\n");
 		snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset);
 		ErrorStatus = viPrintf(vi, (ViPRsrc)command);
+		// add value if U1 need
+		measured_voltage = measure_voltage(vi, buf);
+    	limitU_offset = add_voltage_if_needed(vi, limitU_offset, measured_voltage, command, sizeof(command));
+		
 
-
-		ErrorStatus = viPrintf(vi, (ViPRsrc)"MEAS:VOLT?\n");
-		ErrorStatus = viScanf(vi, (ViPRsrc)"%t", &buf);
-		measured_voltage = atof(buf);
-		if (measured_voltage < limitU_offset) {
-			limitU_offset += limitU_offset - measured_voltage;
-			snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset);
-			ErrorStatus = viPrintf(vi, (ViPRsrc)command);
-		}
 		snprintf(command, sizeof(command), "CURR %.2f mA\n", limitI_offset);
 		ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 
@@ -87,36 +104,31 @@ int main()
 		ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
 		snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_supply);
 		ErrorStatus = viPrintf(vi, (ViPRsrc)command);
-		// add value if U need
-		ErrorStatus = viPrintf(vi, (ViPRsrc)"MEAS:VOLT?\n");
-		ErrorStatus = viScanf(vi, (ViPRsrc)"%t", &buf);
-		measured_voltage = atof(buf);
-		if (measured_voltage < limitU_supply) {
-			limitU_supply += limitU_supply - measured_voltage;
-			snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_supply);
-			ErrorStatus = viPrintf(vi, (ViPRsrc)command);
-		}
+		// add value if U2 need
+		measured_voltage = measure_voltage(vi, buf);
+    	limitU_supply = add_voltage_if_needed(vi, limitU_supply, measured_voltage, command, sizeof(command));
+		
 
 		while (1) {
 			
 			std::this_thread::sleep_for(std::chrono::seconds(2));
 
 			ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
-			ErrorStatus = viPrintf(vi, (ViPRsrc)"MEAS:CURR?\n");
-			ErrorStatus = viScanf(vi, (ViPRsrc)"%t", &buf);
-			printf("Current = %s\n", buf);
+			measured_current = measure_current(vi, buf);
+        	printf("Current = %s\n", buf);
+
 			measured_current = atof(buf);
 			if ((measured_current <= I_offset + 0.01) && (measured_current >= I_offset - 0.01)) {
 				found_U_offset = limitU_offset;
-				printf("Match found: I = %f A\n", measured_current);
-				printf("Found offset voltage = %f\n", found_U_offset);
+				printf("MATCH FOUND: I = %f A\n", measured_current);
+				printf("FOUND OFFSET VOLTAGE =  %f\n", found_U_offset);
 				break;
 			}
 			else if ((stepChanged)&& (measured_current > I_offset + 0.01)) {
 				found_U_offset = limitU_offset;
 				printf("The value of voltage is out of range 350-370 mA. The nearest greater value was found\n");
 				printf("I = %f A\n", measured_current);
-				printf("Found offset voltage = %f\n", found_U_offset);
+				printf("FOUND OFFSET VOLTAGE = %f\n", found_U_offset);
 				break;
 			}
 			
@@ -124,7 +136,7 @@ int main()
 
 			limitU_offset -= step_local; //0.1;
 
-			if ((!stepChanged) && (limitU_offset > (I_offset + 0.01))) {
+			if ((!stepChanged) && (measured_current > (I_offset + 0.01))) {
 				limitU_offset += step_local;
 				step_local = 0.01;
 				stepChanged = true;
@@ -139,14 +151,8 @@ int main()
 			snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset);
 			ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 			
-			ErrorStatus = viPrintf(vi, (ViPRsrc)"MEAS:VOLT?\n");
-			ErrorStatus = viScanf(vi, (ViPRsrc)"%t", &buf);
-			measured_voltage = atof(buf);
-			if (measured_voltage < limitU_offset) {
-				limitU_offset += limitU_offset - measured_voltage;
-				snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset);
-				ErrorStatus = viPrintf(vi, (ViPRsrc)command);
-			}
+			measured_voltage = measure_voltage(vi, buf);
+        	limitU_offset = add_voltage_if_needed(vi, limitU_offset, measured_voltage, command, sizeof(command));
 			
 		}
 
