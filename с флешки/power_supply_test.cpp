@@ -1,4 +1,4 @@
-п»ї// PanoramaCppExample.cpp : Р­С‚РѕС‚ С„Р°Р№Р» СЃРѕРґРµСЂР¶РёС‚ С„СѓРЅРєС†РёСЋ "main". Р—РґРµСЃСЊ РЅР°С‡РёРЅР°РµС‚СЃСЏ Рё Р·Р°РєР°РЅС‡РёРІР°РµС‚СЃСЏ РІС‹РїРѕР»РЅРµРЅРёРµ РїСЂРѕРіСЂР°РјРјС‹.
+// PanoramaCppExample.cpp : Этот файл содержит функцию "main". Здесь начинается и заканчивается выполнение программы.
 //
 
 #include <iostream>
@@ -8,14 +8,18 @@
 #include "visa.h"
 #include "windows.h"
 
+#include <stdio.h> // Для snprintf 
+
 #pragma comment(lib, "E:\\MicranStart\\SCPI_R4M\\_Libs\\mivisa32.lib")
 //#pragma comment(linker, "/include:E:\\MicranStart\\SCPI_R4M\\_Libs\\mivisa32.lib")
 
 int main()
 {
 	std::cout << "Hello World!\n";
+
 	ViSession rm, rsrc;
 	ViStatus status;
+
 	status = viOpenDefaultRM(&rm);
 	char buff[128];
 	//char cmd_str[128];
@@ -24,9 +28,37 @@ int main()
 	status = viOpen(rm, (ViString)"TCPIP::169.254.0.254::8888::SOCKET::VNA", VI_EXCLUSIVE_LOCK, 10000, &rsrc); // directly (via MiVISA only) without Micran Instrument Connector	
 	//status = viOpen(rm, "TCPIP::localhost::5025::SOCKET", VI_EXCLUSIVE_LOCK, 10000, &rsrc); // via arbitrary VISA library using Micran Instrument Connector
 
-	// Р”Р»СЏ РѕС‚РєСЂС‹С‚РёСЏ С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё
+	// Для открытия файла конфигурации
 	const char* config_file_path = "C:\\config.sta";
 
+	// Для сохранения файла
+	const char* save_file_path = "C:\\data.s2p";
+
+	char load_command[256];
+
+	// проверка
+	int result = snprintf(load_command, sizeof(load_command), "MMEMory:LOAD \"%s\"\n", config_file_path);
+
+	if (result < 0 || result >= sizeof(load_command)) {
+		printf("Ошибка: Слишком длинный путь к файлу конфигурации.\n");
+		viClose(rsrc);
+		viClose(rm);
+		std::cin.get();
+		return 1;
+	}
+
+	// отпрака файла конфигурации
+	status = viPrintf(rsrc, (ViString)load_command);
+
+	if (status != VI_SUCCESS)
+	{
+		viStatusDesc(rm, status, buff);
+		printf("Ошибка при загрузке конфигурации: %s\r\n", buff);
+		viClose(rsrc);
+		viClose(rm);
+		std::cin.get();
+		return 1;
+	}
 
 	if (status != VI_SUCCESS)
 	{
@@ -43,7 +75,15 @@ int main()
 	status = viQueryf(rsrc, (ViString)"*IDN?\n", (ViString)"%T", buff);
 	printf("IDN: %s\r\n", buff);
 
-	// СЃР±СЂР°СЃС‹РІР°РµРј С‚СЂР°СЃСЃС‹
+
+	// команда открытия файла конфигурации
+	int result = snprintf(load_command, sizeof(load_command), "MMEMory:LOAD \"%s\"\n", config_file_path);
+	// команда открытия файла конфигурации
+	status = viQueryf(rsrc, (ViString)"MMEMory:LOAD \n", (ViString)"%T", buff);
+
+
+
+	// сбрасываем трассы
 	// Send "Reset" command
 	status = viPrintf(rsrc, (ViString)"*RST\r\n");
 	// Send "Clear status" command
@@ -153,7 +193,7 @@ int main()
 	printf("Error: %s\r\n", buff);
 
 
-// Wait for measurement complete
+	// Wait for measurement complete
 	status = viQueryf(rsrc, (ViString)"*OPC?\n", (ViString)"%T", buff);
 
 
@@ -242,13 +282,42 @@ int main()
 	// Hide all markers
 	status = viPrintf(rsrc, (ViString)"CALCulate:MARKer:AOFF\n");
 	// Wait for user action
-	
-	printf("Error: %s\r\n", buff);*/
+
+	printf("Error: %s\r\n", buff);
 
 	// Wait for user action
 	std::cin.get();
 
-	
+	// Сохранение файла 
+
+	int save_result = snprintf(save_command, sizeof(save_command), "CALCulate:DATA:SNP:SAVE \"%s\"\n", save_file_path);
+
+	if (save_result < 0 || save_result >= sizeof(save_command)) {
+		printf("Ошибка: Слишком длинный путь к файлу сохранения.\n");
+		viClose(rsrc);
+		viClose(rm);
+		std::cin.get();
+		return 1;
+	}
+
+	ViStatus save_status = viPrintf(rsrc, (ViString)save_command);
+
+	char buff[128];
+
+	if (save_status != VI_SUCCESS) {
+		viStatusDesc(rm, save_status, buff);
+		printf("Ошибка при отправке команды сохранения: %s\r\n", buff);
+		viClose(rsrc);
+		viClose(rm);
+		std::cin.get();
+		return 1;
+	}
+
+	// Проверка после сохранения
+	ViStatus error_check_status = viQueryf(rsrc, (ViString)"SYSTem:ERRor?\n", (ViString)"%T", buff);
+	printf("Error after save: %s\r\n", buff);
+
+
 	status = viClose(rsrc);
 	// Close resource manager
 	viClose(rm);
@@ -256,13 +325,13 @@ int main()
 	return 0;
 }
 
-// Р—Р°РїСѓСЃРє РїСЂРѕРіСЂР°РјРјС‹: CTRL+F5 РёР»Рё РјРµРЅСЋ "РћС‚Р»Р°РґРєР°" > "Р—Р°РїСѓСЃРє Р±РµР· РѕС‚Р»Р°РґРєРё"
-// РћС‚Р»Р°РґРєР° РїСЂРѕРіСЂР°РјРјС‹: F5 РёР»Рё РјРµРЅСЋ "РћС‚Р»Р°РґРєР°" > "Р—Р°РїСѓСЃС‚РёС‚СЊ РѕС‚Р»Р°РґРєСѓ"
+// Запуск программы: CTRL+F5 или меню "Отладка" > "Запуск без отладки"
+// Отладка программы: F5 или меню "Отладка" > "Запустить отладку"
 
-// РЎРѕРІРµС‚С‹ РїРѕ РЅР°С‡Р°Р»Сѓ СЂР°Р±РѕС‚С‹ 
-//   1. Р’ РѕРєРЅРµ РѕР±РѕР·СЂРµРІР°С‚РµР»СЏ СЂРµС€РµРЅРёР№ РјРѕР¶РЅРѕ РґРѕР±Р°РІР»СЏС‚СЊ С„Р°Р№Р»С‹ Рё СѓРїСЂР°РІР»СЏС‚СЊ РёРјРё.
-//   2. Р’ РѕРєРЅРµ Team Explorer РјРѕР¶РЅРѕ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ Рє СЃРёСЃС‚РµРјРµ СѓРїСЂР°РІР»РµРЅРёСЏ РІРµСЂСЃРёСЏРјРё.
-//   3. Р’ РѕРєРЅРµ "Р’С‹С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ" РјРѕР¶РЅРѕ РїСЂРѕСЃРјР°С‚СЂРёРІР°С‚СЊ РІС‹С…РѕРґРЅС‹Рµ РґР°РЅРЅС‹Рµ СЃР±РѕСЂРєРё Рё РґСЂСѓРіРёРµ СЃРѕРѕР±С‰РµРЅРёСЏ.
-//   4. Р’ РѕРєРЅРµ "РЎРїРёСЃРѕРє РѕС€РёР±РѕРє" РјРѕР¶РЅРѕ РїСЂРѕСЃРјР°С‚СЂРёРІР°С‚СЊ РѕС€РёР±РєРё.
-//   5. РџРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕ РІС‹Р±РµСЂРёС‚Рµ РїСѓРЅРєС‚С‹ РјРµРЅСЋ "РџСЂРѕРµРєС‚" > "Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІС‹Р№ СЌР»РµРјРµРЅС‚", С‡С‚РѕР±С‹ СЃРѕР·РґР°С‚СЊ С„Р°Р№Р»С‹ РєРѕРґР°, РёР»Рё "РџСЂРѕРµРєС‚" > "Р”РѕР±Р°РІРёС‚СЊ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ СЌР»РµРјРµРЅС‚", С‡С‚РѕР±С‹ РґРѕР±Р°РІРёС‚СЊ РІ РїСЂРѕРµРєС‚ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ С„Р°Р№Р»С‹ РєРѕРґР°.
-//   6. Р§С‚РѕР±С‹ СЃРЅРѕРІР° РѕС‚РєСЂС‹С‚СЊ СЌС‚РѕС‚ РїСЂРѕРµРєС‚ РїРѕР·Р¶Рµ, РІС‹Р±РµСЂРёС‚Рµ РїСѓРЅРєС‚С‹ РјРµРЅСЋ "Р¤Р°Р№Р»" > "РћС‚РєСЂС‹С‚СЊ" > "РџСЂРѕРµРєС‚" Рё РІС‹Р±РµСЂРёС‚Рµ SLN-С„Р°Р№Р».
+// Советы по началу работы 
+//   1. В окне обозревателя решений можно добавлять файлы и управлять ими.
+//   2. В окне Team Explorer можно подключиться к системе управления версиями.
+//   3. В окне "Выходные данные" можно просматривать выходные данные сборки и другие сообщения.
+//   4. В окне "Список ошибок" можно просматривать ошибки.
+//   5. Последовательно выберите пункты меню "Проект" > "Добавить новый элемент", чтобы создать файлы кода, или "Проект" > "Добавить существующий элемент", чтобы добавить в проект существующие файлы кода.
+//   6. Чтобы снова открыть этот проект позже, выберите пункты меню "Файл" > "Открыть" > "Проект" и выберите SLN-файл.
