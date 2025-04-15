@@ -1,0 +1,12 @@
+﻿  test_panorama.cpp
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viOpenDefaultRM в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viOpen в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viClose в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viSetAttribute в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viStatusDesc в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viRead в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viWrite в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viPrintf в функции main.
+test_panorama.obj : error LNK2019: ссылка на неразрешенный внешний символ viQueryf в функции main.
+E:\MicranStart\SCPI_R4M\_Libs\mivisa32.lib : warning LNK4272: тип компьютера библиотеки "x86" конфликтует с типом целевого компьютера "x64"
+E:\MicranStart\panorama\test_panorama\x64\Debug\test_panorama.exe : fatal error LNK1120: неразрешенных внешних элементов: 9
