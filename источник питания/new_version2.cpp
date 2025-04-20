@@ -8,6 +8,8 @@
 #include <cmath>
 #include <iostream>
 #include <string>
+#include <fstream> 
+#include <iomanip>
 
 void checkError(ViStatus errorStatus, ViSession viSession, const char* operation) {
 	if (errorStatus < VI_SUCCESS) {
@@ -91,7 +93,7 @@ void emergencyShutdown(ViSession vi, const char* message) {
 	exit(EXIT_FAILURE);
 }
 
-void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_supply_max, float limitU_supply_step, float limitU_offset, float I_offset) {
+void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_supply_max, float limitU_supply_step, float limitU_offset, float I_offset, const std::string& filePath, const std::string& fileName) {
 	char buf[256] = { 0 };
 	char command[256] = { 0 };
 	ViStatus ErrorStatus = VI_SUCCESS;
@@ -108,15 +110,28 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 	const float criticalCurrentOffset = 0.015; // Аварийная граница значения тока смещения
 	const float criticalCurrentSupply = 0.45; // Аварийная граница значения тока питания
 
+	std::string fullPath = filePath + "/" + fileName;
+	std::ofstream outputFile(fullPath, std::ios::app);
+	if (!outputFile.is_open()) {
+		printf("Error opening file: %s\n", fullPath);
+		return;
+	}
+	outputFile.seekp(0, std::ios::end);
+	//if (outputFile.tellp() == 0) {
+		//outputFile << "Voltage (V),Current (A)\n";
+	//}
+	outputFile << std::fixed << std::setprecision(6);
 
 	for (float current_limitU_supply = limitU_supply_min; current_limitU_supply <= limitU_supply_max; current_limitU_supply += limitU_supply_step) {
 		printf("======== VOLTAGE SUPPLY = %.2f V ========\n", current_limitU_supply);
+		outputFile << "Voltage (V),Current (A)\n";
 
 		sendCommand(vi, "inst:sel out2\n");
 		sendCommand(vi, snprintf(command, sizeof(command), "VOLT %.2f\n", current_limitU_supply));
 
 		printf("Voltage at 1 output\n");
 		addVoltageDifference(vi, limitU_offset_changed, 0);
+		outputFile << limitU_offset_changed << ",";
 		printf("Voltage at 2 output\n");
 		addVoltageDifference(vi, current_limitU_supply, 1);
 
@@ -127,6 +142,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 
 			sendCommand(vi, "inst:sel out1\n");
 			measured_current = getCurrent(vi, 0);
+			outputFile << measured_current << "\n";
 
 			if (measured_current > criticalCurrentOffset) {
 				emergencyShutdown(vi, "Excess offset current");
@@ -171,6 +187,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 			sendCommand(vi, "inst:sel out1\n");
 			sendCommand(vi, snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset_changed)));
 			addVoltageDifference(vi, limitU_offset_changed, 0);
+			outputFile << limitU_offset_changed << ",";
 		}
 
 		sendCommand(vi, "inst:sel out1\n");
@@ -181,6 +198,8 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 		step = 0.1;
 		stepChanged = false;
 	}
+	outputFile.close();
+	//printf("Data saved to %s\n", fullPath);
 }
 
 int main() {
@@ -232,7 +251,9 @@ int main() {
 
 	std::this_thread::sleep_for(std::chrono::seconds(1));
 
-	processVoltageRange(vi, limitU_supply_min, limitU_supply_max, limitU_supply_step, limitU_offset, I_offset);
+	std::string filePath = ; // "C:/Users/MyUser/Documents"
+	std::string fileName = "data.txt";
+	processVoltageRange(vi, limitU_supply_min, limitU_supply_max, limitU_supply_step, limitU_offset, I_offset, filePath, fileName);
 
 	if (vi != VI_NULL) {
 		viClose(vi);
