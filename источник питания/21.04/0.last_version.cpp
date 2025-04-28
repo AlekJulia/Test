@@ -8,10 +8,11 @@
 #include <cmath>
 #include <iostream>
 
+// Функция проверки ошибок после операций VISA
 void checkError(ViStatus errorStatus, ViSession viSession, const char* operation) {
 	if (errorStatus < VI_SUCCESS) {
 		char errMessage[256];
-		ViStatus descStatus = viStatusDesc(viSession, errorStatus, errMessage);
+		ViStatus descStatus = viStatusDesc(viSession, errorStatus, errMessage);// Получаем описание ошибки
 		//viGetErrorDesc(viSession, errorStatus, errMessage);
 		//printf("Voltage = %f V\n\n", measured_voltage);
 		//printf("Error during operation %s:\n", operation);
@@ -26,6 +27,7 @@ void checkError(ViStatus errorStatus, ViSession viSession, const char* operation
 	}
 }
 
+// Функция корректировки выходного напряжения, если измеренное напряжение отличается от ожидаемого
 void add_voltage_difference_if_needed(ViSession vi, float limitU, bool output) {
 	char buf[256] = { 0 };
 	char command[256] = { 0 };
@@ -41,13 +43,16 @@ void add_voltage_difference_if_needed(ViSession vi, float limitU, bool output) {
 		checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
 	}
 
+	// Запрашиваем измерение напряжения
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"MEAS:VOLT?\n");
 	checkError(ErrorStatus, vi, "viPrintf (MEAS:VOLT?)");
 
+	// Считываем измеренное значение
 	ErrorStatus = viScanf(vi, (ViPRsrc)"%t", &buf);
 	checkError(ErrorStatus, vi, "viScanf (MEAS:VOLT?)");
 
-	float measured_voltage = atof(buf);
+	float measured_voltage = atof(buf);// Преобразуем строку в число
+
 
 	if (measured_voltage < limitU) {
 		limitU += limitU - measured_voltage;
@@ -62,37 +67,46 @@ void add_voltage_difference_if_needed(ViSession vi, float limitU, bool output) {
 		checkError(ErrorStatus, vi, "viPrintf (VOLT)");
 	}
 
+	// Снова проверяем итоговое напряжение
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"MEAS:VOLT?\n");
 	checkError(ErrorStatus, vi, "viPrintf (MEAS:VOLT?)");
 
+	// Читаем финальное напряжение
 	ErrorStatus = viScanf(vi, (ViPRsrc)"%t", &buf);
 	checkError(ErrorStatus, vi, "viScanf (MEAS:VOLT?)");
 
-	measured_voltage = atof(buf);
-	printf("Voltage = %f V\n", measured_voltage);
+	
+	measured_voltage = atof(buf);// Преобразуем строку в число
+	printf("Voltage = %f V\n", measured_voltage);// Выводим результат
 }
 
+// Функция аварийного отключения прибора
 void emergencyShutdown(ViSession vi, const char* message) {
 	ViStatus ErrorStatus;
 	char command[256] = { 0 };
-	printf("EMERGENCY: %s\n", message);
+	printf("EMERGENCY: %s\n", message);// Выводим сообщение об ошибке
 
+	// Выбираем выход 2
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
 	checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
 
+	// Устанавливаем напряжение в 0
 	snprintf(command, sizeof(command), "VOLT 0\n");
 	ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 	checkError(ErrorStatus, vi, "viPrintf (VOLT 0)");
 
+	// Выключаем выход
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"OUTP OFF\n");
 	checkError(ErrorStatus, vi, "viPrintf (OUTP OFF)");
 
+	// Закрываем сессию VISA, если она открыта
 	if (vi != VI_NULL) {
 		viClose(vi);
 	}
-	exit(EXIT_FAILURE);
+	exit(EXIT_FAILURE);// Завершаем программу
 }
 
+// Основная функция обработки диапазона напряжений
 void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_supply_max, float limitU_supply_step, float limitU_offset, float I_offset) {
 	char buf[256] = { 0 };
 	char command[256] = { 0 };
@@ -110,9 +124,11 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 	const float criticalCurrentSupply = 0.45; // Аварийная граница значения тока питания
 
 
+	// Перебор всех значений напряжения от min до max с заданным шагом
 	for (float current_limitU_supply = limitU_supply_min; current_limitU_supply <= limitU_supply_max; current_limitU_supply += limitU_supply_step) {
 		printf("======== VOLTAGE SUPPLY = %.2f V ========\n", current_limitU_supply);
 
+		// Выбираем выход 2 и устанавливаем новое напряжение
 		ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
 		checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
 
@@ -120,6 +136,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 		ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 		checkError(ErrorStatus, vi, "viPrintf (VOLT)");
 
+		// Корректируем выход 1 и выход 2
 		printf("Voltage at 1 output\n");
 		add_voltage_difference_if_needed(vi, limitU_offset_changed, 0);
 		printf("Voltage at 2 output\n");
@@ -130,6 +147,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 		while (1) {
 			std::this_thread::sleep_for(std::chrono::seconds(2));
 
+			// Измеряем ток на выходе 1
 			ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out1\n");
 			checkError(ErrorStatus, vi, "viPrintf (inst:sel out1)");
 
@@ -145,6 +163,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 				emergencyShutdown(vi, "Excess offset current");
 			}
 
+			// Измеряем ток на выходе 2
 			ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
 			checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
 
@@ -168,6 +187,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 				break;
 			}
 
+			// Логика обработки перехода через целевое значение
 			if (aboveIOffset && (measured_current < I_offset)) {
 				oscillationCount++;
 			}
@@ -182,6 +202,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 
 			std::this_thread::sleep_for(std::chrono::seconds(2));
 
+			// Уменьшаем шаг при выходе за границы допустимого диапазона значения тока смещ
 			if ((!stepChanged) && (measured_current > (I_offset + 0.01))) {
 				limitU_offset_changed += step;
 				step = 0.01;
@@ -213,7 +234,7 @@ void processVoltageRange(ViSession vi, float limitU_supply_min, float limitU_sup
 		ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 		checkError(ErrorStatus, vi, "viPrintf (VOLT)");
 
-		limitU_offset_changed = limitU_offset;
+		limitU_offset_changed = limitU_offset; // Сброс изменённого напряжения
 		step = 0.1;
 		stepChanged = false;
 	}
@@ -263,17 +284,19 @@ int main() {
 
 	printf("Instrument identification string: %s\n", buf);
 
+	//Устанавливаем лимит напряжения смещения на 1 входе
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out1\n");
 	checkError(ErrorStatus, vi, "viPrintf (inst:sel out1)");
 
 	snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset);
 	ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 	checkError(ErrorStatus, vi, "viPrintf (VOLT)");
-
+	// Устанавливаем лимит тока смещения
 	snprintf(command, sizeof(command), "CURR %.2f mA\n", limitI_offset);
 	ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 	checkError(ErrorStatus, vi, "viPrintf (CURR mA)");
 
+	//Устанавливаем ток питания на второй канал
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
 	checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
 
@@ -281,6 +304,7 @@ int main() {
 	ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 	checkError(ErrorStatus, vi, "viPrintf (CURR mA)");
 
+	//НАПРЯЖЕНИЕ ПИТАНИЯ НЕ УСТАНАВЛИВАЕМ НА КАНАЛ 2 ДО ВКЛЮЧЕНИЯ
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
 	checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
 
@@ -288,83 +312,14 @@ int main() {
 	ErrorStatus = viPrintf(vi, (ViPRsrc)command);
 	checkError(ErrorStatus, vi, "viPrintf (VOLT 0)");
 
+	//Включаем источник
 	ErrorStatus = viPrintf(vi, (ViPRsrc)"OUTP ON\n");
 	checkError(ErrorStatus, vi, "viPrintf (OUTP ON)");
 
 	std::this_thread::sleep_for(std::chrono::seconds(1));
 
+	//Запускаем поиск напряжени
 	processVoltageRange(vi, limitU_supply_min, limitU_supply_max, limitU_supply_step, limitU_offset, I_offset);
-
-	//for (int i = 0; i < 3; i++) {
-	/*for (float current_limitU_supply = limitU_supply_min; current_limitU_supply <= limitU_supply_max; current_limitU_supply += limitU_supply_step) {
-		printf("======== VOLTAGE SUPPLY = %.0f V ========\n", current_limitU_supply);
-
-		ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
-		checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
-
-		snprintf(command, sizeof(command), "VOLT %.2f\n", current_limitU_supply);
-		ErrorStatus = viPrintf(vi, (ViPRsrc)command);
-		checkError(ErrorStatus, vi, "viPrintf (VOLT)");
-
-		add_voltage_difference_if_needed(vi, limitU_offset_changed, 0);
-		add_voltage_difference_if_needed(vi, current_limitU_supply, 1);
-
-		while (1) {
-			std::this_thread::sleep_for(std::chrono::seconds(2));
-
-			ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out2\n");
-			checkError(ErrorStatus, vi, "viPrintf (inst:sel out2)");
-
-			ErrorStatus = viPrintf(vi, (ViPRsrc)"MEAS:CURR?\n");
-			checkError(ErrorStatus, vi, "viPrintf (MEAS:CURR?)");
-
-			ErrorStatus = viScanf(vi, (ViPRsrc)"%t", &buf);
-			checkError(ErrorStatus, vi, "viScanf (MEAS:CURR?)");
-
-			measured_current = atof(buf);
-			printf("Current = %f A\n", measured_current);
-			if ((measured_current <= I_offset + 0.01) && (measured_current >= I_offset - 0.01)) {
-				found_U_offset = limitU_offset_changed;
-				printf("Last current = %f A\n", measured_current);
-				printf("Found offset voltage = %f V\n\n", found_U_offset);
-				break;
-			}
-
-			std::this_thread::sleep_for(std::chrono::seconds(2));
-
-			if ((!stepChanged) && (measured_current > (I_offset + 0.01))) {
-				limitU_offset_changed += step;
-				step = 0.01;
-				stepChanged = true;
-			}
-			if (limitU_offset == 0.4) {
-				printf("Last current = %f out of 0.4 voltage\n", measured_current);
-				break;
-			}
-
-			limitU_offset_changed -= step; //0.1
-
-			ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out1\n");
-			checkError(ErrorStatus, vi, "viPrintf (inst:sel out1)");
-
-			snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset_changed);
-			ErrorStatus = viPrintf(vi, (ViPRsrc)command);
-			checkError(ErrorStatus, vi, "viPrintf (VOLT)");
-
-			add_voltage_difference_if_needed(vi, limitU_offset_changed, 0);
-		}
-
-		ErrorStatus = viPrintf(vi, (ViPRsrc)"inst:sel out1\n");
-		checkError(ErrorStatus, vi, "viPrintf (inst:sel out1)");
-
-		snprintf(command, sizeof(command), "VOLT %.2f\n", limitU_offset);
-		ErrorStatus = viPrintf(vi, (ViPRsrc)command);
-		checkError(ErrorStatus, vi, "viPrintf (VOLT)");
-
-		limitU_offset_changed = limitU_offset;
-		step = 0.1;
-		stepChanged = false;
-	}*/
 
 	if (vi != VI_NULL) {
 		viClose(vi);
