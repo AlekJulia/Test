@@ -139,27 +139,6 @@ void Measure(double start_power = -20, double stop_power = -15, double start = 4
 		status = viPrintf(rsrc, (ViString)":CALCulate:DATA:SNP:SAVE \"E:\\MicranStart\\kalls\\kalls_%d.s2p\"\n", power);
 
 
-		// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ для поиска разницы мощности в 1 дбм
-
-		ifstream inputFile(":CALCulate:DATA:SNP:SAVE \"E:\\MicranStart\\kalls\\kalls_%d.s2p\"\n", power);
-
-		if (inputFile.is_open()) {
-			// тут делаем всякое
-			string line;
-			double fourthNumber = -1;
-			while (getline(inputFile, line)) {
-				stringstream ss(line);
-				int firstNumber; // переименовать в частоту main_freq
-				if (ss >> firstNumber && firstNumber == main_freq) {
-					int num1, num2, num3;
-					if (ss >> num1 >> num2 >> num3 >> fourthNumber) {
-						cout << fourthNumber << endl;
-						break;
-					}
-				}
-			}
-
-			inputFile.close();
 		}
 		else {
 			cerr << "Не удалось открыть файл" << endl;
